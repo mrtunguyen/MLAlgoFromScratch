@@ -1,0 +1,30 @@
+[tool.poetry]
+name = "mlalgo-from-scratch"
+version = "0.1.0"
+description = ""
+authors = ["Jonathan Nguyen"]
+packages = [
+    { include = "mlalgo", from = "." }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.9"
+numpy = "^1.23.2"
+pandas = ">=2.0"
+scipy = ">=1.7.0"
+matplotlib = "^3.7.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.1.2"
+pytest-cov = "^3.0.0"
+pytest-mock = "^3.7.0"
+lint = "^1.2.1"
+black = "^22.3.0"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+pattern  = "^(?P<base>\\d+\\.\\d+\\.\\d+)(-?((?P<stage>[a-zA-Z]+)\\.?(?P<revision>\\d+)?))?"
+
+[build-system]
+requires = ["poetry-core>=1.4.0", "poetry-dynamic-versioning"]
+build-backend = "poetry.core.masonry.api"
