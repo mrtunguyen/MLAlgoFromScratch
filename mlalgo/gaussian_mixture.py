@@ -1,6 +1,9 @@
 # coding: utf-8
 
+from ast import Assign
 from operator import is_
+from urllib import response
+from matplotlib import pyplot as plt
 import numpy as np
 from kmeans import Kmeans
 from scipy.stats import multivariate_normal
@@ -35,6 +38,9 @@ class GaussianMixture:
         self.max_iter = max_iter
         self.tol = tol
         self.init = init
+        self.likelihood = []
+        self.assignments = None
+        self.reponsibilities = None
 
     def _setup_input(self, X):
         """Check the input data and convert to numpy array"""
@@ -88,39 +94,100 @@ class GaussianMixture:
             raise ValueError("init must be either 'random' or 'kmeans'")
         self.weights /= self.weights.sum()
 
-
     def _e_step(self):
         """Compute the probability of each data point belonging to each distribution"""
-        self.likelihoods = self._get_likelihood(self.X)
-        self.assigments = self.likelihoods.argmax(axis=1)
-        self.likelihoods /= self.likelihoods.sum(axis=1, keepdims=True)
+        likelihoods = self._get_likelihood(self.X)
+        self.likelihood.append(likelihoods.sum())
+        weighted_likelihoods = likelihoods * self.weights
+        self.assigments = weighted_likelihoods.argmax(axis=1)
+        self.reponsibilities /= weighted_likelihoods.sum(axis=1)[: np.newaxis]
 
     def _m_step(self):
         """Update the mean and covariance matrix based on the probability computed in E-step"""
-        for i in range(self.n_components):
-            weight = self.likelihoods[:, i].sum()
-            self.weights[i] = weight / self.n_samples
-            self.mean[i] = self.likelihoods[:, i].dot(self.X) / weight
-            self.cov[i] = (
-                self.likelihoods[:, i]
-                * (self.X - self.mean[i]).T.dot(self.X - self.mean[i])
-                / weight
+        weights = self.reponsibilities.sum(axis=0)
+        for assignment in range(self.n_components):
+            responsibity = self.reponsibilities[:, assignment][:, np.newaxis]
+            self.mean[assignment] = (responsibity * self.X).sum(
+                axis=0
+            ) / responsibity.sum()
+            self.cov[assignment] = (
+                (responsibity * (self.X - self.mean[assignment])).T
+                @ ((self.X - self.mean[assignment]) * responsibity)
+                / weights[assignment]
             )
+        self.weights = weights / weights.sum()
 
     def _is_converged(self):
         """Check if the total likelihood of the dataset does not change much"""
-        if not hasattr(self, "prev_likelihood"):
-            self.prev_likelihood = 0
-            return False
-        diff = np.abs(self.likelihoods.sum() - self.prev_likelihood)
-        self.prev_likelihood = self.likelihoods.sum()
-        return diff <= self.tol
+        if (len(self.likelihood) > 1) and (self.likelihood[-1] - self.likelihood[-2] <= self.tol):
+            return True
+        return False
 
     def _get_likelihood(self, X):
         """Compute the likelihood of the dataset"""
         likelihood = np.zeros((X.shape[0], self.n_components))
         for i in range(self.n_components):
-            likelihood[:, i] = self.weights[i] * multivariate_normal.pdf(
+            likelihood[:, i] = multivariate_normal.pdf(
                 X, self.mean[i], self.cov[i]
             )
         return likelihood
+    
+    def _predict(self, X):
+        """Predict the cluster of each data point"""
+        if not X.shape: 
+            return self.assignments
+        likelihood = self._get_likelihood(X)
+        weighted_likelihood = likelihood * self.weights
+        assignments = weighted_likelihood.argmax(axis=1)
+        return assignments
+    
+    def predict(self, X):
+        """Predict the cluster of each data point"""
+        return self._predict(X)
+    
+    def plot(self, data=None, ax=None, holdon=False):
+        """Plot contour for 2D data."""
+        if not (len(self.X.shape) == 2 and self.X.shape[1] == 2):
+            raise AttributeError("Only support for visualizing 2D data.")
+
+        if ax is None:
+            _, ax = plt.subplots()
+
+        if data is None:
+            data = self.X
+            assignments = self.assignments
+        else:
+            assignments = self.predict(data)
+
+        COLOR = "bgrcmyk"
+        cmap = lambda assignment: COLOR[int(assignment) % len(COLOR)]
+
+        # generate grid
+        delta = 0.025
+        margin = 0.2
+        xmax, ymax = self.X.max(axis=0) + margin
+        xmin, ymin = self.X.min(axis=0) - margin
+        axis_X, axis_Y = np.meshgrid(np.arange(xmin, xmax, delta), np.arange(ymin, ymax, delta))
+
+        def grid_gaussian_pdf(mean, cov):
+            grid_array = np.array(list(zip(axis_X.flatten(), axis_Y.flatten())))
+            return multivariate_normal.pdf(grid_array, mean, cov).reshape(axis_X.shape)
+
+        # plot scatters
+        if assignments is None:
+            c = None
+        else:
+            c = [cmap(assignment) for assignment in assignments]
+        ax.scatter(data[:, 0], data[:, 1], c=c)
+
+        # plot contours
+        for assignment in range(self.n_components):
+            ax.contour(
+                axis_X,
+                axis_Y,
+                grid_gaussian_pdf(self.mean[assignment], self.cov[assignment]),
+                colors=cmap(assignment),
+            )
+
+        if not holdon:
+            plt.show()
