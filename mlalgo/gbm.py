@@ -1,5 +1,16 @@
+import re
 import numpy as np
 from scipy.special import expit
+
+
+def mse_criterion(y, splits):
+    y_mean = np.mean(y)
+    return -sum(
+        [
+            np.sum((split - y_mean) ** 2) * (float(split.shape[0])) / y.shape[0]
+            for split in splits
+        ]
+    )
 
 
 class Tree:
@@ -68,7 +79,7 @@ class Tree:
 
             # Split the data
             left_X, right_X, left_target, right_target = self._split_data(
-                X, target, column, threshold
+                X, target, column, threshold, return_X=True
             )
 
             # Build the tree
@@ -238,16 +249,21 @@ class Loss:
 
     def transform(self, y_pred):
         raise y_pred
-    
+
     def approximate(self, y, y_pred):
-        return self.grad(y, y_pred).sum() / (self.hess(y, y_pred).sum() + self.regularization)
-    
+        return self.grad(y, y_pred).sum() / (
+            self.hess(y, y_pred).sum() + self.regularization
+        )
+
     def gain(self, y, y_pred):
-        return 0.5 * (self.grad(y, y_pred).sum() ** 2) / (self.hess(y, y_pred).sum() + self.regularization)
+        return (
+            0.5
+            * (self.grad(y, y_pred).sum() ** 2)
+            / (self.hess(y, y_pred).sum() + self.regularization)
+        )
 
 
 class LeastSquaresLoss(Loss):
-
     def grad(self, y, y_pred):
         return y - y_pred
 
@@ -256,7 +272,6 @@ class LeastSquaresLoss(Loss):
 
 
 class LogisticLoss(Loss):
-
     def grad(self, y, y_pred):
         return y * expit(-y * y_pred)
 
